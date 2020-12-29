@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-config
+  namespace: default
+data:
+  java_options: "-Xmx1500m"
+  log4j.properties: |
+    log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+    log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}
+    log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+    log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+    log4j.rootLogger=${zookeeper.root.logger}
+    zookeeper.console.threshold=INFO
+    zookeeper.root.logger=INFO, CONSOLE
+  zoo.cfg: |
+    4lw.commands.whitelist=ruok
+    clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty
+    clientPort=2181
+    dataDir=/tmp/zookeeper
+    dynamicConfigFile=/opt/zookeeper/conf/zoo.cfg.dynamic
+    initLimit=5
+    reconfigEnabled=true
+    serverCnxnFactory=org.apache.zookeeper.server.NettyServerCnxnFactory
+    standaloneEnabled=false
+    syncLimit=2
+    tickTime=2000
+
+    metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider
+    # Prometheus end point will be http://hostname:httPort/metrics.
+    metricsProvider.httpPort=7000
+    metricsProvider.exportJvmInfo=true
+  zoo.cfg.dynamic: |
+    server.1=zookeeper-0.zookeeper-headless.default.svc.cluster.local:2888:3888
+    server.2=zookeeper-1.zookeeper-headless.default.svc.cluster.local:2888:3888
+    server.3=zookeeper-2.zookeeper-headless.default.svc.cluster.local:2888:3888
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  namespace: default
+  labels:
+    app: zookeeper
+spec:
+  ports:
+    - port: 2181
+      name: client
+    - port: 2888
+      name: quorum
+    - port: 3888
+      name: election
+    - port: 7000
+      name: metrics
+  clusterIP: None
+  selector:
+    app: zookeeper
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-service
+  namespace: default
+  labels:
+    app: zookeeper
+spec:
+  ports:
+    - port: 7000
+      name: metrics
+    - port: 8080
+      name: admin
+  selector:
+    app: zookeeper
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: zookeeper # has to match .spec.template.metadata.labels
+  serviceName: "zookeeper-headless"
+  replicas: 3 # by default is 1; has to match .spec.template.spec.initContainers.env.ZK_SERVER_REPLICAS.value
+  template:
+    metadata:
+      labels:
+        app: zookeeper # has to match .spec.selector.matchLabels
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: zookeeper
+          image: strataform/zookeeper:dev
+          imagePullPolicy: Always
+          env:
+            - name: _JAVA_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: zookeeper-config
+                  key: java_options
+            - name: ZOO_DATADIR_AUTOCREATE_DISABLE
+              value: "1"
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 2888
+              name: quorum
+            - containerPort: 3888
+              name: election
+            - containerPort: 7000
+              name: metrics
+            - containerPort: 8080
+              name: admin
+          readinessProbe:
+            exec:
+              command:
+                - "bin/health.sh"
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - "bin/health.sh"
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: "/opt/zookeeper/conf"
+              readOnly: true
+            - name: data-dir
+              mountPath: "/tmp/zookeeper"
+      volumes:
+        - name: config
+          configMap:
+            name: zookeeper-config
+            items:
+              - key: "log4j.properties"
+                path: "log4j.properties"
+              - key: "zoo.cfg"
+                path: "zoo.cfg"
+              - key: "zoo.cfg.dynamic"
+                path: "zoo.cfg.dynamic"
+  volumeClaimTemplates:
+    - metadata:
+        name: data-dir
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: "gp2"
+        resources:
+          requests:
+            storage: 80Gi
