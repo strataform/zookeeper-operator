@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ""
+  namespace: ""
+  labels:
+    created-by: ""
+    managed-by: "" # Used for filtering of Deployments created by the controller.
+  ownerReferences: # Used for finding which Zookeeper this Service belongs to.
+    - apiVersion: v1
+      kind: Zookeeper
+      name: ""
+      uid: ""
+spec:
+  ports:
+    - port: 2181
+      name: client
+    - port: 2888
+      name: quorum
+    - port: 3888
+      name: election
+    - port: 7000
+      name: metrics
+  clusterIP: None
+  selector:
+    app: ""

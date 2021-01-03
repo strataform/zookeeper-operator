@@ -1,0 +1,83 @@
+plugins {
+    id "distribution"
+    id "java"
+    id "jacoco"
+}
+
+group "com.gitlab.strataform"
+version "0.0.1-SNAPSHOT"
+
+archivesBaseName = "zookeeper-operator"
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    implementation "io.javalin:javalin:${javalinVersion}"
+    implementation "io.javaoperatorsdk:operator-framework:${javaOperatorVersion}"
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    annotationProcessor "io.javaoperatorsdk:operator-framework:${javaOperatorVersion}"
+
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
+
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
+}
+
+wrapper {
+    gradleVersion = "${gradleVersion}"
+}
+
+jacoco {
+    toolVersion = "$jacocoVersion"
+}
+
+test {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport // report is always generated after tests run
+
+    jvmArgs "-XX:+ShowCodeDetailsInExceptionMessages"
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+
+    reports {
+        xml.enabled true
+        xml.destination file("${buildDir}/reports/jacoco/report.xml")
+        html.enabled false
+        csv.enabled false
+    }
+}
+
+task operatorScript(type: CreateStartScripts) {
+    description "Builds Strataform operator and generates start script"
+    outputDir = file("build/scripts")
+    mainClassName = "com.github.strataform.operator.zookeeper.ZookeeperOperator"
+    applicationName = "zookeeper-operator"
+    defaultJvmOpts = ["-Dlogback.configurationFile=file:conf/logback.xml"]
+    classpath = files(jar.archiveFile) + sourceSets.main.runtimeClasspath
+}
+
+distributions {
+    main {
+        distributionBaseName = archivesBaseName
+        contents {
+            into('bin') {
+                from project.operatorScript
+            }
+            into('lib') {
+                from(jar)
+                from(project.configurations.runtimeClasspath)
+            }
+            into('conf') {
+                from(project.file('src/main/resources/logback.xml'))
+            }
+        }
+    }
+}

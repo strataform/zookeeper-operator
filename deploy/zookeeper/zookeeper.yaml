@@ -1,0 +1,7 @@
+apiVersion: zookeeper.strataform.github.com/v1alpha1
+kind: Zookeeper
+metadata:
+  name: zookeeper
+spec:
+  image: strataform/zookeeper:dev
+  replicas: 3

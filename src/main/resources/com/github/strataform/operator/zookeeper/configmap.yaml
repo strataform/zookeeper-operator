@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ""
+  namespace: ""
+  labels:
+    created-by: ""
+    managed-by: "" # Used for filtering of Deployments created by the controller.
+  ownerReferences: # Used for finding which Zookeeper this ConfigMap belongs to.
+    - apiVersion: v1
+      kind: Zookeeper
+      name: ""
+      uid: ""
+data:
+  java_options: "-Xmx1500m"
+  log4j.properties: |
+    log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+    log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}
+    log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+    log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+    log4j.rootLogger=${zookeeper.root.logger}
+    zookeeper.console.threshold=INFO
+    zookeeper.root.logger=INFO, CONSOLE
+  zoo.cfg: |
+    4lw.commands.whitelist=ruok
+    clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty
+    clientPort=2181
+    dataDir=/tmp/zookeeper
+    dynamicConfigFile=/opt/zookeeper/conf/zoo.cfg.dynamic
+    initLimit=5
+    reconfigEnabled=true
+    serverCnxnFactory=org.apache.zookeeper.server.NettyServerCnxnFactory
+    standaloneEnabled=false
+    syncLimit=2
+    tickTime=2000
+
+    metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider
+    # Prometheus end point will be http://hostname:httPort/metrics.
+    metricsProvider.httpPort=7000
+    metricsProvider.exportJvmInfo=true
